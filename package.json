@@ -1,6 +1,6 @@
 {
   "name": "mctwain",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local scanner helper that lets web pages scan from network scanners (eSCL/AirScan).",
   "license": "MIT",
   "private": true,

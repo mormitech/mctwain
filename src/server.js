@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Bonjour } from 'bonjour-service';
 
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 const PORT = Number(process.env.MCTWAIN_PORT ?? 7788);
 const ALLOWED_ORIGINS = new Set(
   (process.env.MCTWAIN_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://localhost:5174,http://localhost:4173')
