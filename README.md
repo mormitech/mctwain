@@ -61,25 +61,68 @@ All endpoints answer only requests from allowed origins and bind to `127.0.0.1`.
 
 | Request | Description |
 |---|---|
-| `GET /ping` | `{ "ok": true, "name": "mctwain", "version": "…" }` |
-| `GET /devices` | `{ "devices": [{ "id", "name", "url", "duplex", "sources" }] }` found via mDNS |
-| `POST /scan?device=<url>&source=platen\|feeder&dpi=300&color=true` | `{ "pages": ["<base64 jpeg>", …] }` |
+| `GET /ping` | `{ "ok": true, "name": "mctwain", "version": "…" }`. Cheap liveness check; clients can poll it. |
+| `GET /devices` | Searches the network for ~5 s and returns every scanner that answered: `{ "devices": [{ "guid", "name", "model", "host", "ip", "port", "scheme" }] }`. |
+| `GET /devices/{guid}` | One scanner with its **capabilities** and live **status**. |
+| `POST /scan?device={guid}&source=&dpi=&color=&duplex=&paper=` | Scans and returns `{ "pages": ["<base64 jpeg>", …] }`. |
+
+**GUIDs.** A scanner's GUID is the UUID it announces over mDNS (almost all eSCL scanners do). If it announces none,
+mctwain derives a stable one from the scanner's host name and model, with no timestamp, so the same scanner always gets
+the same GUID. Found scanners are cached; one that misses two searches in a row is dropped.
+
+**Capabilities** (`GET /devices/{guid}`):
+
+```jsonc
+{
+  "guid": "e3248000-…", "name": "…", "model": "…", "host": "…", "ip": "…", "port": 80, "scheme": "http",
+  "status": { "state": "Idle", "adfState": "ScannerAdfLoaded" },   // adfState: is paper in the feeder?
+  "capabilities": {
+    "make": "…", "model": "…", "uuid": "…", "escl": "2.63",
+    "sources": {
+      "platen": { "colorModes": ["BlackAndWhite1","Grayscale8","RGB24"], "formats": ["image/jpeg", …],
+                  "resolutions": { "values": [100,200,300,600], "range": null },
+                  "size": { "unit": "1/300 inch", "minWidth": 64, "maxWidth": 2550, "minHeight": 64, "maxHeight": 3507 },
+                  "intents": ["Document", …] },
+      "feeder": { "capacity": 20, "simplex": { …same as platen… }, "duplex": null }   // null: not supported
+    }
+  }
+}
+```
+
+`sources.platen` is `null` for a scanner without a flatbed and `sources.feeder` is `null` without a feeder.
+
+**Scan options** (all optional; unsupported values are rejected with a `400` that says what is supported):
+
+| Parameter | Values | Default |
+|---|---|---|
+| `source` | `platen` (flatbed), `feeder` | `feeder` if the scanner has one, else `platen` |
+| `dpi` | a resolution the scanner supports | 300, or the closest supported |
+| `color` | `color`, `gray`, `bw` | `color` |
+| `duplex` | `true` (both sides, feeder only), `false` | `false` |
+| `paper` | `a4`, `letter`, `legal`, `max` (everything the scanner can scan); never larger than the scanner | `a4` |
 
 ```js
-const { devices } = await (await fetch('http://127.0.0.1:7788/devices')).json();
-const res = await fetch(`http://127.0.0.1:7788/scan?device=${encodeURIComponent(devices[0].url)}&source=feeder`, {
-  method: 'POST',
-});
+const base = 'http://127.0.0.1:7788';
+const { devices } = await (await fetch(`${base}/devices`)).json();
+const { guid } = devices[0];
+const { capabilities } = await (await fetch(`${base}/devices/${guid}`)).json();
+const res = await fetch(`${base}/scan?device=${guid}&source=feeder&dpi=300&color=gray`, { method: 'POST' });
 const { pages } = await res.json(); // base64 JPEGs, one per sheet
 ```
 
-`device` must be a LAN address (private ranges or `*.local`); anything else is rejected. Each `/devices` call searches
-for 5 seconds, so clients should poll it (the sample page asks again 10 s after each answer) to see scanners that
-are switched on or off.
+Errors are `{ "error": "…", "details": … }` with status `400` (bad options), `404` (unknown GUID: call `/devices`
+first) or `502` (the scanner failed or is not reachable).
+
+Each `/devices` call searches for 5 seconds, so clients should poll it (the sample page asks again 10 s after each
+answer) to see scanners that are switched on or off. Scanner addresses come only from the search, never from the
+client, and mctwain only contacts private-network addresses.
 
 HTTPS scanners use self-signed certificates, so their certificates are not verified. Traffic stays on the local
 network, but it is not protected against someone impersonating the scanner there. A scanner that offers both HTTP and
 HTTPS is used over HTTP, since some HTTPS implementations use TLS versions Node refuses.
+
+> **0.2.0 breaking change:** `/scan` takes `device={guid}` instead of a URL, and `/devices` no longer returns `url`,
+> `id`, `sources` or `duplex`; read those from `/devices/{guid}`.
 
 ## Configuration
 
@@ -98,6 +141,7 @@ Release builds only allow the local development origins above. To allow your own
 npm install
 npm run dev        # run with auto-reload
 npm run build      # installer package for the current OS and CPU, in dist/
+npm test           # unit tests (node --test)
 npm run smoke      # start the built executable and check /ping
 ```
 
