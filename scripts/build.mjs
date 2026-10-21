@@ -74,7 +74,9 @@ writeFileSync(
 );
 rmSync(join(out, target.exe), { force: true });
 run(node, ['--build-sea', 'sea-config.json'], { cwd: out });
-if (process.platform === 'darwin') run('codesign', ['--sign', '-', '--force', join(out, target.exe)]);
+// Apple Silicon refuses unsigned code. Intel Macs don't require a signature, and re-signing the injected
+// binary there makes it crash at startup.
+if (process.platform === 'darwin' && arch === 'arm64') run('codesign', ['--sign', '-', '--force', join(out, target.exe)]);
 
 // 4. Installer package.
 rmSync(stage, { recursive: true, force: true });
@@ -107,7 +109,7 @@ if (process.platform === 'darwin') {
       cpSync(join(out, target.exe), join(app, 'Contents', 'Resources', 'mctwain'));
       chmodSync(join(app, 'Contents', 'Resources', 'mctwain'), 0o755);
     }
-    run('codesign', ['--sign', '-', '--force', '--deep', app]);
+    run('codesign', ['--sign', '-', '--force', app]);
   };
   makeApp('Install mctwain', 'com.mctwain.installer', 'install-launcher.sh', true);
   makeApp('Uninstall mctwain', 'com.mctwain.uninstaller', 'uninstall-launcher.sh', false);
