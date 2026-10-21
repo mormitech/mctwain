@@ -67,6 +67,7 @@ await build({
 });
 
 // 3. Single executable from the bundle (code-signed ad hoc on macOS, required on Apple Silicon).
+//    Note: the resulting macOS x64 executable crashes at startup (SIGSEGV), so only arm64 is built there.
 const node = await officialNode();
 writeFileSync(
   join(out, 'sea-config.json'),
@@ -74,9 +75,7 @@ writeFileSync(
 );
 rmSync(join(out, target.exe), { force: true });
 run(node, ['--build-sea', 'sea-config.json'], { cwd: out });
-// Apple Silicon refuses unsigned code. Intel Macs don't require a signature, and re-signing the injected
-// binary there makes it crash at startup.
-if (process.platform === 'darwin' && arch === 'arm64') run('codesign', ['--sign', '-', '--force', join(out, target.exe)]);
+if (process.platform === 'darwin') run('codesign', ['--sign', '-', '--force', join(out, target.exe)]);
 
 // 4. Installer package.
 rmSync(stage, { recursive: true, force: true });

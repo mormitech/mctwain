@@ -15,6 +15,7 @@ web page  ──fetch──►  mctwain (127.0.0.1:7788)  ──eSCL/HTTP──�
 - **Supported:** network scanners that speak **eSCL** (AirScan / Mopria), found automatically over mDNS. Flatbed and
   document feeder (ADF).
 - **Not yet:** USB-only scanners, and real TWAIN / WIA / SANE drivers. The name is a goal, not a feature yet.
+- **macOS on Intel is not supported yet:** the single-executable build crashes at startup there. Apple Silicon works.
 - Tested on a Brother MFC-L2710DN (flatbed and ADF). Windows and Linux packages are built by CI but have had little
   manual testing, so please open an issue if something is off.
 
@@ -24,7 +25,7 @@ Download the file for your system from the [latest release](../../releases/lates
 
 | OS | File | Install |
 |---|---|---|
-| macOS (Apple Silicon / Intel) | `mctwain-<version>-macos-<arch>.dmg` | Open the DMG, double-click **Install mctwain** |
+| macOS (Apple Silicon) | `mctwain-<version>-macos-arm64.dmg` | Open the DMG, double-click **Install mctwain** |
 | Windows (x64) | `mctwain-<version>-windows-x64.zip` | Unzip, double-click **Install mctwain.cmd** |
 | Linux (x64 / arm64) | `mctwain-<version>-linux-<arch>.tar.gz` | Extract, run `./install.sh` |
 
