@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 // mctwain: local scanner helper. Discovers eSCL (AirScan) scanners via mDNS and proxies scan jobs
 // for web pages. Binds to 127.0.0.1 only and only answers allowed origins.
+import { spawnSync } from 'node:child_process';
+import { existsSync, rmSync } from 'node:fs';
 import http from 'node:http';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { Bonjour } from 'bonjour-service';
 
-const VERSION = '0.1.0';
+const VERSION = '0.1.1';
 const PORT = Number(process.env.MCTWAIN_PORT ?? 7788);
 const ALLOWED_ORIGINS = new Set(
   (process.env.MCTWAIN_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://localhost:5174,http://localhost:4173')
@@ -227,6 +231,25 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`mctwain listening on http://127.0.0.1:${PORT}`);
 });
+
+// Homebrew cannot stop a running service when the formula is uninstalled, so the process would linger on from
+// memory. When our own executable has been gone for ~30 s (a short gap is normal during `brew upgrade`),
+// unregister the launchd job (macOS) and exit.
+const SELF = process.argv[1];
+const WATCH_MS = Number(process.env.MCTWAIN_WATCHDOG_MS ?? 10_000);
+let missingChecks = 0;
+setInterval(() => {
+  missingChecks = existsSync(SELF) ? 0 : missingChecks + 1;
+  if (missingChecks < 3) return;
+  console.log('mctwain files are gone (uninstalled?); shutting down');
+  const label = process.env.XPC_SERVICE_NAME;
+  if (process.platform === 'darwin' && label?.startsWith('sh.brew.')) {
+    rmSync(join(homedir(), 'Library', 'LaunchAgents', `${label}.plist`), { force: true });
+    spawnSync('launchctl', ['bootout', `gui/${process.getuid()}/${label}`]);
+  }
+  bonjour.destroy();
+  process.exit(0);
+}, WATCH_MS).unref();
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
