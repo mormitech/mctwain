@@ -21,6 +21,17 @@ web page  ──fetch──►  mctwain (127.0.0.1:7788)  ──eSCL/HTTP──�
 
 ## Install
 
+### Homebrew (macOS and Linux)
+
+```
+brew install mormitech/tap/mctwain
+brew services start mctwain    # runs it now and at every login
+```
+
+This needs no security prompts and works on Intel Macs too. To stop it: `brew services stop mctwain`.
+
+### Installers
+
 Download the file for your system from the [latest release](../../releases/latest).
 
 | OS | File | Install |

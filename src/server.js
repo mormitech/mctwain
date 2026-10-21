@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // mctwain: local scanner helper. Discovers eSCL (AirScan) scanners via mDNS and proxies scan jobs
 // for web pages. Binds to 127.0.0.1 only and only answers allowed origins.
 import http from 'node:http';

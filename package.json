@@ -17,5 +17,16 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
-  }
+  },
+  "bin": {
+    "mctwain": "src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mormitech/mctwain.git"
+  },
+  "homepage": "https://github.com/mormitech/mctwain"
 }
