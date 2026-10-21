@@ -106,6 +106,18 @@ npm run smoke      # start the built executable and check /ping
 Node. It downloads the official Node binary (checksum-verified), because distro builds such as Homebrew's can't be
 used for this. Push a tag like `v0.1.0` to publish a release with all platforms via GitHub Actions.
 
+## Releasing
+
+`package.json` is the single source of truth for the version (the helper reports it on `/ping`, and the build names its
+files after it).
+
+```
+npm version patch -m "Release %s"   # bumps package.json and package-lock.json, commits, tags vX.Y.Z
+git push --follow-tags              # CI builds every platform and publishes the GitHub release
+```
+
+Then update `url` and `sha256` in the Homebrew tap formula.
+
 ## Notes on scanners
 
 - Brother scanners ignore the whole scan request unless it is sent as `Content-Type: application/xml`. With
