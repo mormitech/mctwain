@@ -6,7 +6,7 @@
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const NODE_VERSION = process.env.NODE_VERSION ?? 'v25.9.0';
@@ -113,12 +113,17 @@ if (process.platform === 'darwin') {
   makeApp('Uninstall mctwain', 'com.mctwain.uninstaller', 'uninstall-launcher.sh', false);
   const dmg = join(dist, `${baseName}.dmg`);
   rmSync(dmg, { force: true });
-  // hdiutil intermittently fails with "resource busy" on CI runners, so retry a few times.
+  // Size the image explicitly: hdiutil's automatic size can come out too small ("No space left on device")
+  // for a ~130 MB executable. The final UDZO image is compressed, so this only sizes the temporary one.
+  const sizeMb = Math.ceil((statSync(join(out, target.exe)).size / 1e6) * 1.5 + 30);
+  // hdiutil also fails intermittently on CI runners, so retry a few times.
   for (let attempt = 1; ; attempt++) {
     try {
-      run('hdiutil', ['create', '-volname', 'mctwain', '-srcfolder', join(stage, 'dmg'), '-format', 'UDZO', '-ov', dmg], {
-        stdio: ['ignore', 'ignore', 'inherit'],
-      });
+      run(
+        'hdiutil',
+        ['create', '-volname', 'mctwain', '-srcfolder', join(stage, 'dmg'), '-fs', 'HFS+', '-size', `${sizeMb}m`, '-format', 'UDZO', '-ov', dmg],
+        { stdio: ['ignore', 'ignore', 'inherit'] },
+      );
       break;
     } catch (err) {
       if (attempt === 5) throw err;
