@@ -32,6 +32,11 @@ jobs:
         run: df -h /
       - run: npm run build
       - run: npm run smoke
+      - if: failure() && runner.os == 'macOS'
+        run: |
+          file build/mctwain
+          codesign -dvv build/mctwain || true
+          ./build/mctwain & sleep 3; kill %1 || true
       - uses: actions/upload-artifact@v4
         with:
           name: mctwain-${{ matrix.name }}
