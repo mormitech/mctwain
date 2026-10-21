@@ -30,7 +30,7 @@ cat > "$PLIST" <<PLISTEOF
   <key>EnvironmentVariables</key>
   <dict><key>MCTWAIN_ALLOWED_ORIGINS</key><string>__ALLOWED_ORIGINS__</string></dict>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>StandardOutPath</key><string>$LOGS/mctwain.log</string>
   <key>StandardErrorPath</key><string>$LOGS/mctwain.log</string>
 </dict>

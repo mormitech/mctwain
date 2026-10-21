@@ -30,6 +30,9 @@ brew services start mctwain    # runs it now and at every login
 
 This needs no security prompts and works on Intel Macs too. To stop it: `brew services stop mctwain`.
 
+If you `brew uninstall mctwain` while it runs, the helper notices that its files are gone and shuts itself down within
+about 30 seconds. (Version 0.1.0 doesn't: stop it first with `brew services stop mctwain`.)
+
 ### Installers
 
 Download the file for your system from the [latest release](../../releases/latest).
