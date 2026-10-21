@@ -113,9 +113,19 @@ if (process.platform === 'darwin') {
   makeApp('Uninstall mctwain', 'com.mctwain.uninstaller', 'uninstall-launcher.sh', false);
   const dmg = join(dist, `${baseName}.dmg`);
   rmSync(dmg, { force: true });
-  run('hdiutil', ['create', '-volname', 'mctwain', '-srcfolder', join(stage, 'dmg'), '-format', 'UDZO', '-ov', dmg], {
-    stdio: 'ignore',
-  });
+  // hdiutil intermittently fails with "resource busy" on CI runners, so retry a few times.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      run('hdiutil', ['create', '-volname', 'mctwain', '-srcfolder', join(stage, 'dmg'), '-format', 'UDZO', '-ov', dmg], {
+        stdio: ['ignore', 'ignore', 'inherit'],
+      });
+      break;
+    } catch (err) {
+      if (attempt === 5) throw err;
+      console.warn(`hdiutil failed (attempt ${attempt}/5), retrying...`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000);
+    }
+  }
   console.log(`Built ${dmg}`);
 } else {
   const dir = join(stage, baseName);
