@@ -130,10 +130,11 @@ HTTPS is used over HTTP, since some HTTPS implementations use TLS versions Node 
 |---|---|---|
 | `MCTWAIN_PORT` | `7788` | Port on `127.0.0.1` |
 | `MCTWAIN_DISCOVERY_MS` | `5000` | How long each `/devices` request listens for scanners |
-| `MCTWAIN_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:5174,http://localhost:4173` | Comma-separated web origins allowed to use the helper |
+| `MCTWAIN_ALLOWED_ORIGINS` | the local dev origins (`http://localhost:5173`, `:5174`, `:4173`) plus `https://mormitech.com` and `https://www.mormitech.com` | Comma-separated web origins allowed to use the helper; replaces the default list |
 
-Release builds only allow the local development origins above. To allow your own site, build with
-`MCTWAIN_ORIGINS=https://your-site.example npm run build`, or set `MCTWAIN_ALLOWED_ORIGINS` when running the helper.
+Release builds allow the local development origins and the mormitech.com site. To allow your own site, build with
+`MCTWAIN_ORIGINS=https://your-site.example npm run build` (it replaces the list in the installers), or set
+`MCTWAIN_ALLOWED_ORIGINS` when running the helper.
 
 ## Build from source
 
