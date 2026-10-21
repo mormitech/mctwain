@@ -28,6 +28,8 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+      - if: runner.os == 'macOS'
+        run: df -h /
       - run: npm run build
       - run: npm run smoke
       - uses: actions/upload-artifact@v4
