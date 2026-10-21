@@ -10,7 +10,10 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSyn
 import { join, resolve } from 'node:path';
 
 const NODE_VERSION = process.env.NODE_VERSION ?? 'v25.9.0';
-const ORIGINS = process.env.MCTWAIN_ORIGINS ?? 'http://localhost:5173,http://localhost:5174,http://localhost:4173';
+// Origins the installed helper accepts (keep in sync with DEFAULT_ORIGINS in src/server.js).
+const ORIGINS =
+  process.env.MCTWAIN_ORIGINS ??
+  'http://localhost:5173,http://localhost:5174,http://localhost:4173,https://mormitech.com,https://www.mormitech.com';
 
 const root = resolve(import.meta.dirname, '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));

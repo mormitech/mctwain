@@ -18,10 +18,16 @@ import { isGuid } from './guid.js';
 
 const VERSION = pkg.version;
 const PORT = Number(process.env.MCTWAIN_PORT ?? 7788);
+// Local development servers and the production site. Set MCTWAIN_ALLOWED_ORIGINS to replace this list.
+const DEFAULT_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:4173',
+  'https://mormitech.com',
+  'https://www.mormitech.com',
+];
 const ALLOWED_ORIGINS = new Set(
-  (process.env.MCTWAIN_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://localhost:5174,http://localhost:4173')
-    .split(',')
-    .map((o) => o.trim()),
+  (process.env.MCTWAIN_ALLOWED_ORIGINS?.split(',') ?? DEFAULT_ORIGINS).map((o) => o.trim()),
 );
 
 function knownDevice(guid) {
