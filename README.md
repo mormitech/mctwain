@@ -12,8 +12,8 @@ web page  ──fetch──►  mctwain (127.0.0.1:7788)  ──eSCL/HTTP──�
 
 ## Status
 
-- **Supported:** network scanners that speak **eSCL** (AirScan / Mopria), found automatically over mDNS. Flatbed and
-  document feeder (ADF).
+- **Supported:** network scanners that speak **eSCL** (AirScan / Mopria), found automatically over mDNS, both plain
+  HTTP (`_uscan`) and HTTPS (`_uscans`). Flatbed and document feeder (ADF).
 - **Not yet:** USB-only scanners, and real TWAIN / WIA / SANE drivers. The name is a goal, not a feature yet.
 - **macOS on Intel is not supported yet:** the single-executable build crashes at startup there. Apple Silicon works.
 - Tested on a Brother MFC-L2710DN (flatbed and ADF). Windows and Linux packages are built by CI but have had little
@@ -73,13 +73,20 @@ const res = await fetch(`http://127.0.0.1:7788/scan?device=${encodeURIComponent(
 const { pages } = await res.json(); // base64 JPEGs, one per sheet
 ```
 
-`device` must be a LAN address (private ranges or `*.local`); anything else is rejected.
+`device` must be a LAN address (private ranges or `*.local`); anything else is rejected. Each `/devices` call searches
+for 5 seconds, so clients should poll it (the sample page asks again 10 s after each answer) to see scanners that
+are switched on or off.
+
+HTTPS scanners use self-signed certificates, so their certificates are not verified. Traffic stays on the local
+network, but it is not protected against someone impersonating the scanner there. A scanner that offers both HTTP and
+HTTPS is used over HTTP, since some HTTPS implementations use TLS versions Node refuses.
 
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `MCTWAIN_PORT` | `7788` | Port on `127.0.0.1` |
+| `MCTWAIN_DISCOVERY_MS` | `5000` | How long each `/devices` request listens for scanners |
 | `MCTWAIN_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:5174,http://localhost:4173` | Comma-separated web origins allowed to use the helper |
 
 Release builds only allow the local development origins above. To allow your own site, build with

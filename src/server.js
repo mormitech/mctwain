@@ -4,6 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Bonjour } from 'bonjour-service';
@@ -18,24 +19,66 @@ const ALLOWED_ORIGINS = new Set(
 
 const bonjour = new Bonjour();
 
-function discover(timeoutMs = 2500) {
+const DISCOVERY_MS = Number(process.env.MCTWAIN_DISCOVERY_MS ?? 5000);
+
+// Listens for eSCL scanners announcing themselves over mDNS: plain HTTP (_uscan) and HTTPS (_uscans).
+function discover(timeoutMs = DISCOVERY_MS) {
   return new Promise((resolve) => {
     const found = new Map();
-    const browser = bonjour.find({ type: 'uscan' }, (svc) => {
+    const onService = (scheme) => (svc) => {
       const address = svc.addresses?.find((a) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? svc.host;
       const root = svc.txt?.rs ? `/${svc.txt.rs}` : '/eSCL';
+      // A scanner that offers both is listed once; plain HTTP wins because it works with every scanner
+      // (some HTTPS implementations use old TLS versions that Node refuses).
+      if (found.get(svc.name)?.url.startsWith('http:') && scheme === 'https') return;
       found.set(svc.name, {
         id: svc.name,
         name: svc.txt?.ty ?? svc.name,
-        url: `http://${address}:${svc.port}${root}`,
+        url: `${scheme}://${address}:${svc.port}${root}`,
         duplex: svc.txt?.duplex === 'T',
         sources: (svc.txt?.is ?? 'platen').split(','),
       });
-    });
+    };
+    const browsers = [
+      bonjour.find({ type: 'uscan' }, onService('http')),
+      bonjour.find({ type: 'uscans' }, onService('https')),
+    ];
     setTimeout(() => {
-      browser.stop();
+      browsers.forEach((browser) => browser.stop());
       resolve([...found.values()]);
     }, timeoutMs);
+  });
+}
+
+// Overlapping /devices calls (several tabs, or a slow client) share one search.
+let discovering = null;
+function discoverShared() {
+  discovering ??= discover().finally(() => (discovering = null));
+  return discovering;
+}
+
+// fetch() for scanner requests. HTTPS scanners use self-signed certificates, so those are not verified;
+// requests only ever go to LAN addresses (see isLanUrl).
+function scannerFetch(url, { method = 'GET', headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url);
+    const client = target.protocol === 'https:' ? https : http;
+    const req = client.request(target, { method, headers, rejectUnauthorized: false }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const noBody = [204, 205, 304].includes(res.statusCode);
+        resolve(
+          new Response(noBody ? null : Buffer.concat(chunks), {
+            status: res.statusCode,
+            headers: Object.fromEntries(Object.entries(res.headers).filter(([, v]) => typeof v === 'string')),
+          }),
+        );
+      });
+    });
+    req.setTimeout(120_000, () => req.destroy(new Error('Scanner did not respond in time')));
+    req.on('error', reject);
+    req.end(body);
   });
 }
 
@@ -44,7 +87,7 @@ function isLanUrl(value) {
   try {
     const { protocol, hostname } = new URL(value);
     return (
-      protocol === 'http:' &&
+      (protocol === 'http:' || protocol === 'https:') &&
       (/^(10|127)\./.test(hostname) ||
         /^192\.168\./.test(hostname) ||
         /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
@@ -94,7 +137,7 @@ class ScanError extends Error {
 
 async function readState(baseUrl) {
   try {
-    const xml = await (await fetch(`${baseUrl}/ScannerStatus`)).text();
+    const xml = await (await scannerFetch(`${baseUrl}/ScannerStatus`)).text();
     return {
       scannerState: xml.match(/<pwg:State>(\w+)</)?.[1],
       adfState: xml.match(/<scan:AdfState>(\w+)</)?.[1],
@@ -108,7 +151,7 @@ async function readState(baseUrl) {
 async function checkReady(baseUrl, source) {
   let xml;
   try {
-    xml = await (await fetch(`${baseUrl}/ScannerStatus`)).text();
+    xml = await (await scannerFetch(`${baseUrl}/ScannerStatus`)).text();
   } catch {
     throw new Error('Scanner is not reachable');
   }
@@ -127,7 +170,7 @@ async function scan(baseUrl, opts) {
   // The scanner answers 503 while it is busy (e.g. finishing the previous job), so retry briefly.
   let create;
   for (let attempt = 1; attempt <= 6; attempt++) {
-    create = await fetch(`${baseUrl}/ScanJobs`, {
+    create = await scannerFetch(`${baseUrl}/ScanJobs`, {
       method: 'POST',
       // Brother scanners ignore the whole request body (and scan the glass with defaults) unless this
       // is application/xml, not text/xml.
@@ -172,14 +215,14 @@ async function scan(baseUrl, opts) {
     for (;;) {
       // Brother returns 404 for back-to-back NextDocument requests while feeding.
       if (pages.length) await new Promise((r) => setTimeout(r, 1500));
-      const res = await fetch(`${job}/NextDocument`);
+      const res = await scannerFetch(`${job}/NextDocument`);
       if (res.status === 404 || res.status === 409) break; // no more pages
       if (!res.ok) throw new Error(`Scanner error while reading page (HTTP ${res.status})`);
       pages.push(Buffer.from(await res.arrayBuffer()));
       if (opts.source === 'platen') break; // flatbed yields one page per job
     }
   } finally {
-    fetch(job, { method: 'DELETE' }).catch(() => {});
+    scannerFetch(job, { method: 'DELETE' }).catch(() => {});
   }
   if (!pages.length) throw new Error('Scanner returned no pages (is there a document?)');
   return pages;
@@ -211,7 +254,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (url.pathname === '/ping') return json(200, { ok: true, name: 'mctwain', version: VERSION });
-    if (url.pathname === '/devices') return json(200, { devices: await discover() });
+    if (url.pathname === '/devices') return json(200, { devices: await discoverShared() });
     if (url.pathname === '/scan' && req.method === 'POST') {
       const q = url.searchParams;
       const device = q.get('device');
