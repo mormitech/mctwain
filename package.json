@@ -1,0 +1,21 @@
+{
+  "name": "mctwain",
+  "version": "0.1.0",
+  "description": "Local scanner helper that lets web pages scan from network scanners (eSCL/AirScan).",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "build": "node scripts/build.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "bonjour-service": "^1.4.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
