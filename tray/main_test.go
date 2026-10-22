@@ -49,9 +49,30 @@ func TestViewSummarisesTooManyScanners(t *testing.T) {
 	}
 }
 
-func TestIconIsAPNG(t *testing.T) {
-	b := printerIcon()
-	if len(b) < 8 || string(b[1:4]) != "PNG" {
-		t.Fatal("printerIcon must return PNG bytes")
+func TestIconsArePNGs(t *testing.T) {
+	for name, b := range map[string][]byte{"template": printerTemplatePNG(), "colour": printerColorPNG()} {
+		if len(b) < 8 || string(b[1:4]) != "PNG" {
+			t.Fatalf("%s icon must be PNG bytes", name)
+		}
+	}
+}
+
+func TestIcoWrapsThePNG(t *testing.T) {
+	p := printerColorPNG()
+	ico := icoFromPNG(p, 44)
+	if ico[2] != 1 || ico[4] != 1 { // type icon, one image
+		t.Fatalf("bad ICO header: % x", ico[:6])
+	}
+	if ico[6] != 44 || ico[7] != 44 {
+		t.Fatalf("bad ICO size: %d x %d", ico[6], ico[7])
+	}
+	if got := int(ico[14]) | int(ico[15])<<8 | int(ico[16])<<16 | int(ico[17])<<24; got != len(p) {
+		t.Fatalf("directory says %d bytes, PNG has %d", got, len(p))
+	}
+	if string(ico[22:26]) != "\x89PNG" {
+		t.Fatal("PNG data must start at offset 22")
+	}
+	if len(ico) != 22+len(p) {
+		t.Fatalf("ICO length %d, want %d", len(ico), 22+len(p))
 	}
 }

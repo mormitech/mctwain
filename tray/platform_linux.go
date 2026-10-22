@@ -7,3 +7,5 @@ import "errors"
 func openURL(url string) error { return errors.New("not implemented on Linux yet") }
 
 func startHelper() error { return errors.New("not implemented on Linux yet") }
+
+func trayIcon() []byte { return printerColorPNG() }

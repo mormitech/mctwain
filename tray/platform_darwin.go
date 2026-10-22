@@ -17,3 +17,5 @@ func startHelper() error {
 	}
 	return errors.New("Homebrew not found; start mcTwain another way")
 }
+
+func trayIcon() []byte { return printerTemplatePNG() }
