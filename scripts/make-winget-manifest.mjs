@@ -11,7 +11,7 @@ const version = process.argv[2] ?? JSON.parse(readFileSync(join(root, 'package.j
 const outDir = resolve(process.argv[3] ?? join(root, 'build', 'winget', version));
 const repo = 'mormitech/mctwain';
 const id = 'mormitech.mctwain';
-const schema = '1.6.0';
+const schema = '1.12.0';
 
 const url = `https://github.com/${repo}/releases/download/v${version}/mctwain-setup-${version}-windows-x64.exe`;
 const res = await fetch(url);

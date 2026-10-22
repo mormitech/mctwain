@@ -1,0 +1,54 @@
+name: winget-check
+
+# Checks the winget manifest of a published release the way Microsoft's pull request template asks for:
+# `winget validate`, then a real `winget install --manifest`, then uninstall. Run it before submitting to winget-pkgs.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Released version to check (for example 0.4.0)
+        required: true
+
+jobs:
+  winget:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/make-winget-manifest.mjs ${{ inputs.version }} manifest
+      - name: Get winget
+        shell: pwsh
+        run: |
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host 'winget not found, installing it'
+            Install-PackageProvider -Name NuGet -Force | Out-Null
+            Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery | Out-Null
+            Repair-WinGetPackageManager -AllUsers
+          }
+          winget --version
+      - name: Validate the manifest
+        shell: pwsh
+        run: winget validate --manifest manifest
+      - name: Install from the manifest
+        shell: pwsh
+        run: |
+          winget settings --enable LocalManifestFiles
+          winget install --manifest manifest --silent --accept-package-agreements --disable-interactivity
+          Start-Sleep -Seconds 8
+          $status = Invoke-RestMethod http://127.0.0.1:7788/status
+          if ($status.name -ne 'mctwain') { throw 'helper does not answer on 7788' }
+          Write-Host "helper answers: version $($status.version)"
+          if (-not (Get-Process mctwain-tray -ErrorAction SilentlyContinue)) { throw 'tray is not running' }
+          if (-not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').mctwain) { throw 'no startup entry' }
+          Write-Host 'installed by winget: helper, tray and startup entry all present'
+      - name: Uninstall with winget
+        shell: pwsh
+        run: |
+          winget uninstall mormitech.mctwain --silent --disable-interactivity
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Test-Path "$env:LOCALAPPDATA\mctwain\mctwain.exe") -and ((Get-Date) -lt $deadline)) { Start-Sleep -Seconds 2 }
+          if (Get-Process mctwain, mctwain-tray -ErrorAction SilentlyContinue) { throw 'processes still running' }
+          if (Test-Path "$env:LOCALAPPDATA\mctwain\mctwain.exe") { throw 'files left after uninstall' }
+          Write-Host 'winget uninstall removed everything'
