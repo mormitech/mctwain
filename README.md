@@ -39,18 +39,40 @@ This needs no security prompts. If Homebrew says the tap is not trusted, run `br
 If you `brew uninstall mctwain` while it runs, the helper notices that its files are gone and shuts itself down within
 about 30 seconds. (Version 0.1.0 doesn't: stop it first with `brew services stop mctwain`.)
 
-### Installers
+### Windows
+
+Pick one. All three install the helper and a tray icon, start both at login, and start them right away. None needs
+admin rights.
+
+```
+winget install mormitech.mctwain
+```
+
+```
+scoop bucket add mormitech https://github.com/mormitech/scoop-bucket
+scoop install mctwain
+```
+
+Or download `mctwain-setup-<version>-windows-x64.exe` from the [latest release](../../releases/latest) and run it
+(`/VERYSILENT` installs it without any window). Uninstall with `winget uninstall mormitech.mctwain`,
+`scoop uninstall mctwain` or "Apps" in Windows Settings.
+
+Windows hides new tray icons behind the `^` arrow; drag the icon out once to keep it visible. The winget package needs
+Microsoft to approve each release first, so it can lag behind a new version by a few days.
+
+### Other installers
 
 Download the file for your system from the [latest release](../../releases/latest).
 
 | OS | File | Install |
 |---|---|---|
 | macOS (Apple Silicon) | `mctwain-<version>-macos-arm64.dmg` | Open the DMG, double-click **Install mctwain** |
-| Windows (x64) | `mctwain-<version>-windows-x64.zip` | Unzip, double-click **Install mctwain.cmd** |
+| Windows (x64) | `mctwain-<version>-windows-x64.zip` | Unzip, double-click **Install mctwain.cmd** (the `.exe` above is easier) |
 | Linux (x64 / arm64) | `mctwain-<version>-linux-<arch>.tar.gz` | Extract, run `./install.sh` |
 
-The installer puts the helper in your user folder (no admin rights) and starts it at login. To remove it, use
-**Uninstall mctwain** (macOS), **Uninstall mctwain.cmd** (Windows) or `./uninstall.sh` (Linux).
+The installers put the helper in your user folder (no admin rights) and start it at login. To remove it, use
+**Uninstall mctwain** (macOS), **Uninstall mctwain.cmd** (Windows) or `./uninstall.sh` (Linux). The macOS and Linux
+installers do not include the tray icon; Homebrew does on macOS.
 
 ### Security prompts
 
@@ -58,7 +80,7 @@ The releases are not code-signed yet, so the operating system warns on first lau
 
 - **macOS:** double-click the installer, then open **System Settings → Privacy & Security** and click **Open Anyway**
   next to the blocked "Install mctwain" message. Or run `xattr -d com.apple.quarantine <file>.dmg` before opening it.
-- **Windows:** SmartScreen shows "Windows protected your PC". Click **More info → Run anyway**.
+- **Windows:** SmartScreen may show "Windows protected your PC" because the installer is not code-signed yet. Click **More info → Run anyway**. Signing is tracked in [#2](https://github.com/mormitech/mctwain/issues/2).
 - **Linux:** none.
 
 ## API
@@ -167,9 +189,9 @@ used for this. Push a tag like `v0.1.0` to publish a release with all platforms 
 ## Menu bar tray (macOS)
 
 `tray/` is a small Go program (using [fyne.io/systray](https://github.com/fyne-io/systray)) that shows a printer icon
-in the menu bar. Its menu shows "mcTwain vX.Y.Z running" (or "not running", with a **Start mcTwain** item), the scanners
+in the menu bar (macOS) or notification area (Windows). Its menu shows "mcTwain vX.Y.Z running" (or "not running", with a **Start mcTwain** item), the scanners
 the helper found, **Open mcPrint** and **Quit tray**. It only reads the helper's `/status` and `/devices`, polling in the
-background so the menu never blocks. Windows and Linux are stubs for now. Set `MCTWAIN_URL` to point it at a helper on
+background so the menu never blocks. Linux is a stub for now. Set `MCTWAIN_URL` to point it at a helper on
 another port.
 
 Go is only needed to build it (`cd tray && go build`, or `npm run build`, which includes it when Go is installed). CI
