@@ -4,6 +4,8 @@ import { fetchCapabilities, fetchStatus, isLanUrl } from './escl.js';
 import { deviceGuid } from './guid.js';
 
 const DISCOVERY_MS = Number(process.env.MCTWAIN_DISCOVERY_MS ?? 5000);
+// Pause between the end of one background search and the start of the next.
+const SEARCH_INTERVAL_MS = Number(process.env.MCTWAIN_SEARCH_INTERVAL_MS ?? 10_000);
 const CAPABILITIES_TTL_MS = 5 * 60_000;
 // A scanner is dropped after missing this many searches in a row, so one lost reply doesn't make it flicker.
 const MAX_MISSED = 2;
@@ -15,7 +17,11 @@ const cache = new Map();
 // guid -> { capabilities, at }
 const capabilityCache = new Map();
 
-export const closeDiscovery = () => bonjour.destroy();
+export const closeDiscovery = () => {
+  loopStopped = true;
+  clearTimeout(loopTimer);
+  bonjour.destroy();
+};
 
 const record = (svc, scheme) => {
   const ip = svc.addresses?.find((a) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? null;
@@ -78,14 +84,55 @@ export const publicDevice = (rec) => ({
   scheme: rec.scheme,
 });
 
-// Overlapping /devices calls (several tabs, or a slow client) share one search.
+// One search at a time: the background loop and any manual search share it.
 let searching = null;
+let lastSearchAt = null;
+let searchCount = 0;
+
 export function search(timeoutMs = DISCOVERY_MS) {
   searching ??= listen(timeoutMs)
     .then(applySearch)
+    .then(() => {
+      lastSearchAt = new Date();
+      searchCount += 1;
+    })
     .finally(() => (searching = null));
   return searching;
 }
+
+// Background discovery: search, pause, search again, for as long as the helper runs, so the cache is always
+// ready and /devices never has to wait for a search. `ready()` resolves once the first search is done.
+let loopTimer = null;
+let loopStopped = false;
+let loopStarted = false;
+let markReady;
+const firstSearchDone = new Promise((resolve) => (markReady = resolve));
+
+export const ready = () => firstSearchDone;
+
+export function startDiscovery() {
+  if (loopStarted) return firstSearchDone;
+  loopStarted = true;
+  const tick = async () => {
+    try {
+      await search();
+    } catch (err) {
+      console.error('scanner search failed:', err.message);
+    }
+    markReady();
+    if (!loopStopped) loopTimer = setTimeout(tick, SEARCH_INTERVAL_MS);
+  };
+  tick();
+  return firstSearchDone;
+}
+
+export const discoveryStatus = () => ({
+  state: searching ? 'searching' : 'idle',
+  lastSearchAt: lastSearchAt?.toISOString() ?? null,
+  searches: searchCount,
+  windowMs: DISCOVERY_MS,
+  intervalMs: SEARCH_INTERVAL_MS,
+});
 
 export const listDevices = () => [...cache.values()].map(publicDevice);
 
