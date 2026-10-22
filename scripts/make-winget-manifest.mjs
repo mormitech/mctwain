@@ -18,14 +18,19 @@ const res = await fetch(url);
 if (!res.ok) throw new Error(`${url}: HTTP ${res.status} (is the release published?)`);
 const sha = createHash('sha256').update(Buffer.from(await res.arrayBuffer())).digest('hex').toUpperCase();
 
+// winget-pkgs files start with a schema header; without it `winget validate` warns (and exits non-zero).
+const header = (kind) => `# yaml-language-server: $schema=https://aka.ms/winget-manifest.${kind}.${schema}.schema.json`;
+
 const files = {
-  [`${id}.yaml`]: `PackageIdentifier: ${id}
+  [`${id}.yaml`]: `${header('version')}
+PackageIdentifier: ${id}
 PackageVersion: ${version}
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: ${schema}
 `,
-  [`${id}.installer.yaml`]: `PackageIdentifier: ${id}
+  [`${id}.installer.yaml`]: `${header('installer')}
+PackageIdentifier: ${id}
 PackageVersion: ${version}
 InstallerLocale: en-US
 InstallerType: inno
@@ -43,7 +48,8 @@ Installers:
 ManifestType: installer
 ManifestVersion: ${schema}
 `,
-  [`${id}.locale.en-US.yaml`]: `PackageIdentifier: ${id}
+  [`${id}.locale.en-US.yaml`]: `${header('defaultLocale')}
+PackageIdentifier: ${id}
 PackageVersion: ${version}
 PackageLocale: en-US
 Publisher: mormitech
