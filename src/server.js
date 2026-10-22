@@ -3,7 +3,8 @@
 // for web pages. Binds to 127.0.0.1 only and only answers allowed origins.
 //
 //   GET  /ping            -> { ok, name, version }
-//   GET  /devices         -> { devices: [{ guid, name, model, host, ip, port, scheme }] }  (searches ~5 s)
+//   GET  /status          -> { ok, name, version, uptimeSeconds, scanners, discovery }
+//   GET  /devices         -> { devices: [{ guid, name, model, host, ip, port, scheme }] }  (from the cache)
 //   GET  /devices/{guid}  -> the scanner with its capabilities and live status
 //   POST /scan?device={guid}&source=&dpi=&color=&duplex=&paper=  -> { pages: [base64 jpeg, ...] }
 import { spawnSync } from 'node:child_process';
@@ -12,7 +13,16 @@ import http from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import pkg from '../package.json' with { type: 'json' };
-import { closeDiscovery, capabilitiesOf, describeDevice, findDevice, listDevices, search } from './discovery.js';
+import {
+  capabilitiesOf,
+  closeDiscovery,
+  describeDevice,
+  discoveryStatus,
+  findDevice,
+  listDevices,
+  ready,
+  startDiscovery,
+} from './discovery.js';
 import { HttpError, resolveScanOptions, scan } from './escl.js';
 import { isGuid } from './guid.js';
 
@@ -63,8 +73,19 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname === '/ping') return json(200, { ok: true, name: 'mctwain', version: VERSION });
 
+    if (url.pathname === '/status') {
+      return json(200, {
+        ok: true,
+        name: 'mctwain',
+        version: VERSION,
+        uptimeSeconds: Math.round(process.uptime()),
+        scanners: listDevices().length,
+        discovery: discoveryStatus(),
+      });
+    }
+
     if (url.pathname === '/devices') {
-      await search();
+      await ready(); // only waits during the first search after start-up
       return json(200, { devices: listDevices() });
     }
 
@@ -99,6 +120,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`mctwain listening on http://127.0.0.1:${PORT}`);
+  startDiscovery();
 });
 
 // Homebrew cannot stop a running service when the formula is uninstalled, so the process would linger on from

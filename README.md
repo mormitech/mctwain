@@ -62,13 +62,19 @@ All endpoints answer only requests from allowed origins and bind to `127.0.0.1`.
 | Request | Description |
 |---|---|
 | `GET /ping` | `{ "ok": true, "name": "mctwain", "version": "…" }`. Cheap liveness check; clients can poll it. |
-| `GET /devices` | Searches the network for ~5 s and returns every scanner that answered: `{ "devices": [{ "guid", "name", "model", "host", "ip", "port", "scheme" }] }`. |
+| `GET /status` | Health of the helper: `{ ok, name, version, uptimeSeconds, scanners, discovery: { state, lastSearchAt, searches, windowMs, intervalMs } }`. Works without an `Origin` header, so non-browser clients (a tray app, scripts) can use it. |
+| `GET /devices` | The scanners found so far, straight from the cache (no waiting): `{ "devices": [{ "guid", "name", "model", "host", "ip", "port", "scheme" }] }`. |
 | `GET /devices/{guid}` | One scanner with its **capabilities** and live **status**. |
 | `POST /scan?device={guid}&source=&dpi=&color=&duplex=&paper=` | Scans and returns `{ "pages": ["<base64 jpeg>", …] }`. |
 
 **GUIDs.** A scanner's GUID is the UUID it announces over mDNS (almost all eSCL scanners do). If it announces none,
 mctwain derives a stable one from the scanner's host name and model, with no timestamp, so the same scanner always gets
-the same GUID. Found scanners are cached; one that misses two searches in a row is dropped.
+the same GUID.
+
+**Background discovery.** mctwain searches for scanners (mDNS, 5 s window) in a loop for as long as it runs, pausing
+10 s between searches, so its cache is always ready. A scanner that misses two searches in a row is dropped, so a
+scanner that is switched off disappears within about half a minute. Only right after start-up does `/devices` wait,
+for the first search to finish.
 
 **Capabilities** (`GET /devices/{guid}`):
 
@@ -113,9 +119,9 @@ const { pages } = await res.json(); // base64 JPEGs, one per sheet
 Errors are `{ "error": "…", "details": … }` with status `400` (bad options), `404` (unknown GUID: call `/devices`
 first) or `502` (the scanner failed or is not reachable).
 
-Each `/devices` call searches for 5 seconds, so clients should poll it (the sample page asks again 10 s after each
-answer) to see scanners that are switched on or off. Scanner addresses come only from the search, never from the
-client, and mctwain only contacts private-network addresses.
+Clients can poll `/devices` freely, since it only reads the cache (the sample page asks again 10 s after each
+answer). Scanner addresses come only from the search, never from the client, and mctwain only contacts
+private-network addresses.
 
 HTTPS scanners use self-signed certificates, so their certificates are not verified. Traffic stays on the local
 network, but it is not protected against someone impersonating the scanner there. A scanner that offers both HTTP and
@@ -129,7 +135,8 @@ HTTPS is used over HTTP, since some HTTPS implementations use TLS versions Node 
 | Variable | Default | Meaning |
 |---|---|---|
 | `MCTWAIN_PORT` | `7788` | Port on `127.0.0.1` |
-| `MCTWAIN_DISCOVERY_MS` | `5000` | How long each `/devices` request listens for scanners |
+| `MCTWAIN_DISCOVERY_MS` | `5000` | How long each background search listens for scanners |
+| `MCTWAIN_SEARCH_INTERVAL_MS` | `10000` | Pause between background searches |
 | `MCTWAIN_ALLOWED_ORIGINS` | the local dev origins (`http://localhost:5173`, `:5174`, `:4173`) plus `https://mormitech.com` and `https://www.mormitech.com` | Comma-separated web origins allowed to use the helper; replaces the default list |
 
 Release builds allow the local development origins and the mormitech.com site. To allow your own site, build with
