@@ -64,7 +64,9 @@ jobs:
           $uninstaller = Get-ChildItem (Join-Path $dir 'unins*.exe') | Select-Object -First 1
           $u = Start-Process $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
           if (-not $u.WaitForExit(120000)) { throw 'uninstaller did not finish in 2 minutes' }
-          Start-Sleep -Seconds 3
+          # The uninstaller hands over to a temporary copy of itself and exits, so wait for the files to go.
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Test-Path (Join-Path $dir 'mctwain.exe')) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Seconds 2 }
           if (Get-Process mctwain, mctwain-tray -ErrorAction SilentlyContinue) { throw 'processes still running after uninstall' }
           if (Test-Path (Join-Path $dir 'mctwain.exe')) { throw 'files left after uninstall' }
           if ((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).mctwain) { throw 'startup entry left after uninstall' }
