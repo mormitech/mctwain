@@ -34,6 +34,7 @@ const manifest = {
     'sh.Run """$current\\mctwain-tray.exe""", 0, False',
     '"@',
     "Set-Content -Path (Join-Path $target 'start.vbs') -Value $vbs -Encoding ASCII",
+    `if (-not (Test-Path '${RUN_KEY}')) { New-Item -Path '${RUN_KEY}' | Out-Null }`,
     `Set-ItemProperty -Path '${RUN_KEY}' -Name 'mctwain' -Value ('wscript.exe "' + (Join-Path $target 'start.vbs') + '"')`,
     "Start-Process wscript.exe -ArgumentList ('\"' + (Join-Path $target 'start.vbs') + '\"')",
   ],

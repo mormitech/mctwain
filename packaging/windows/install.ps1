@@ -13,7 +13,10 @@ foreach ($file in 'mctwain.exe', 'mctwain-tray.exe', 'start.vbs') {
   if (Test-Path $source) { Copy-Item $source (Join-Path $dir $file) -Force }
 }
 
-Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'mctwain' `
+$runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+# A fresh profile may not have the Run key yet (never force-create it: that could wipe other startup entries).
+if (-not (Test-Path $runKey)) { New-Item -Path $runKey | Out-Null }
+Set-ItemProperty -Path $runKey -Name 'mctwain' `
   -Value "wscript.exe `"$dir\start.vbs`""
 Start-Process wscript.exe -ArgumentList "`"$dir\start.vbs`""
 
