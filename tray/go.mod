@@ -1,6 +1,6 @@
 module github.com/mormitech/mctwain/tray
 
-go 1.27.3
+go 1.22
 
 require fyne.io/systray v1.12.2
 

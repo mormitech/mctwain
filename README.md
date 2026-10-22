@@ -28,7 +28,13 @@ brew install mormitech/tap/mctwain
 brew services start mctwain    # runs it now and at every login
 ```
 
-This needs no security prompts and works on Intel Macs too. To stop it: `brew services stop mctwain`.
+On Apple Silicon and Linux this installs the finished, self-contained helper and has **no Homebrew dependencies** (it
+embeds its own Node). On macOS it also installs a small menu bar icon that shows whether the helper is running and which
+scanners it found; `brew services start mctwain` starts both, and `brew services stop mctwain` removes both. Intel Macs
+install the source on Homebrew's Node instead (no menu bar icon yet).
+
+This needs no security prompts. If Homebrew says the tap is not trusted, run `brew trust mormitech/tap`. To stop it:
+`brew services stop mctwain`.
 
 If you `brew uninstall mctwain` while it runs, the helper notices that its files are gone and shuts itself down within
 about 30 seconds. (Version 0.1.0 doesn't: stop it first with `brew services stop mctwain`.)
@@ -149,7 +155,7 @@ Release builds allow the local development origins and the mormitech.com site. T
 npm install
 npm run dev        # run with auto-reload
 npm run build      # installer package for the current OS and CPU, in dist/
-npm test           # unit tests (node --test)
+npm test           # unit tests (node --test); the tray has its own: cd tray && go test ./...
 npm run smoke      # start the built executable and check /ping
 ```
 
@@ -157,6 +163,17 @@ npm run smoke      # start the built executable and check /ping
 [single executable applications](https://nodejs.org/api/single-executable-applications.html), so users don't need
 Node. It downloads the official Node binary (checksum-verified), because distro builds such as Homebrew's can't be
 used for this. Push a tag like `v0.1.0` to publish a release with all platforms via GitHub Actions.
+
+## Menu bar tray (macOS)
+
+`tray/` is a small Go program (using [fyne.io/systray](https://github.com/fyne-io/systray)) that shows a printer icon
+in the menu bar. Its menu shows "mcTwain vX.Y.Z running" (or "not running", with a **Start mcTwain** item), the scanners
+the helper found, **Open mcPrint** and **Quit tray**. It only reads the helper's `/status` and `/devices`, polling in the
+background so the menu never blocks. Windows and Linux are stubs for now. Set `MCTWAIN_URL` to point it at a helper on
+another port.
+
+Go is only needed to build it (`cd tray && go build`, or `npm run build`, which includes it when Go is installed). CI
+builds it on macOS runners and ships it in the release archive, so nobody who installs mctwain needs Go.
 
 ## Releasing
 
@@ -168,7 +185,11 @@ npm version patch -m "Release %s"   # bumps package.json and package-lock.json, 
 git push --follow-tags              # CI builds every platform and publishes the GitHub release
 ```
 
-Then update `url` and `sha256` in the Homebrew tap formula.
+Then regenerate the Homebrew tap formula from the published release assets (it downloads them to compute checksums):
+
+```
+node scripts/make-formula.mjs > ../homebrew-tap/Formula/mctwain.rb
+```
 
 ## Notes on scanners
 

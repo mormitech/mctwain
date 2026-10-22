@@ -4,7 +4,7 @@
 //   Windows: .zip with install/uninstall scripts (starts at login)
 // Usage: npm run build
 import { build } from 'esbuild';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -79,6 +79,28 @@ writeFileSync(
 rmSync(join(out, target.exe), { force: true });
 run(node, ['--build-sea', 'sea-config.json'], { cwd: out });
 if (process.platform === 'darwin') run('codesign', ['--sign', '-', '--force', join(out, target.exe)]);
+
+// 3b. macOS menu bar tray (Go). Only our build machines need Go; the finished binary has no dependencies.
+let trayBuilt = false;
+if (process.platform === 'darwin' && existsSync(join(root, 'tray', 'go.mod')) && spawnSync('go', ['version']).status === 0) {
+  rmSync(join(out, 'mctwain-tray'), { force: true });
+  run('go', ['build', '-trimpath', '-ldflags', '-s -w', '-o', join(out, 'mctwain-tray'), '.'], {
+    cwd: join(root, 'tray'),
+    env: { ...process.env, CGO_ENABLED: '1' },
+  });
+  trayBuilt = true;
+} else if (process.platform === 'darwin') {
+  console.warn('Go not found: building without the tray');
+}
+
+// 3c. Plain archive for package managers (Homebrew): the finished executables, no installer scripts.
+if (process.platform !== 'win32') {
+  mkdirSync(dist, { recursive: true });
+  const archive = join(dist, `mctwain-bin-${pkg.version}-${target.label}-${arch}.tar.gz`);
+  rmSync(archive, { force: true });
+  run(tar, ['-czf', archive, '-C', out, 'mctwain', ...(trayBuilt ? ['mctwain-tray'] : [])]);
+  console.log(`Built ${archive}`);
+}
 
 // 4. Installer package.
 rmSync(stage, { recursive: true, force: true });
