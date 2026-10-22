@@ -1,7 +1,7 @@
 name: winget-check
 
-# Checks the winget manifest of a published release the way Microsoft's pull request template asks for:
-# `winget validate`, then a real `winget install --manifest`, then uninstall. Run it before submitting to winget-pkgs.
+# Checks the winget manifest of a published release before it is submitted to winget-pkgs: `winget validate`, then the
+# installer run with winget's switches (see the note below on why not `winget install` itself).
 on:
   workflow_dispatch:
     inputs:
@@ -39,33 +39,34 @@ jobs:
           $other = ($out -split "`n") | Where-Object { $_ -match 'Manifest (Warning|Error)' -and $_ -notmatch 'schema header' }
           if ($other) { throw "unexpected validation messages: $other" }
           $global:LASTEXITCODE = 0  # a step ends with the last native exit code; we judged the messages ourselves
-      - name: Install from the manifest
+      # `winget install` itself hangs on this headless runner (winget.exe waits forever and never starts the
+      # installer), so run the installer the way winget would: download from the manifest URL, check the manifest's
+      # SHA-256, then run it with winget's Inno Setup switches.
+      - name: Run the installer the way winget does
         shell: pwsh
         run: |
-          winget settings --enable LocalManifestFiles
-          $log = Join-Path $env:RUNNER_TEMP 'winget.log'
-          $p = Start-Process winget -ArgumentList 'install','--manifest','manifest','--silent','--accept-package-agreements','--disable-interactivity','--log',$log -PassThru -NoNewWindow
-          if (-not $p.WaitForExit(240000)) {
-            Write-Host '--- winget did not finish in 4 minutes; processes:'
-            Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'winget|mctwain|wscript|setup|unins|AppInstaller' } |
-              Select-Object ProcessId, ParentProcessId, Name, CommandLine | Format-Table -AutoSize -Wrap | Out-String -Width 220 | Write-Host
-            if (Test-Path $log) { Write-Host '--- winget log (tail):'; Get-Content $log | Select-Object -Last 40 }
-            throw 'winget install hung'
-          }
-          Write-Host "winget install exit code: $($p.ExitCode)"
+          $manifest = Get-Content manifest\mormitech.mctwain.installer.yaml -Raw
+          $url = [regex]::Match($manifest, 'InstallerUrl: (\S+)').Groups[1].Value
+          $sha = [regex]::Match($manifest, 'InstallerSha256: (\S+)').Groups[1].Value
+          $exe = Join-Path $env:RUNNER_TEMP 'mctwain-setup.exe'
+          Invoke-WebRequest $url -OutFile $exe
+          if ((Get-FileHash $exe -Algorithm SHA256).Hash -ne $sha) { throw "installer hash differs from the manifest ($sha)" }
+          Write-Host 'installer hash matches the manifest'
+          $p = Start-Process $exe -ArgumentList '/SP-','/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          if (-not $p.WaitForExit(180000)) { throw 'installer did not finish in 3 minutes' }
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
           Start-Sleep -Seconds 8
           $status = Invoke-RestMethod http://127.0.0.1:7788/status
           if ($status.name -ne 'mctwain') { throw 'helper does not answer on 7788' }
           Write-Host "helper answers: version $($status.version)"
           if (-not (Get-Process mctwain-tray -ErrorAction SilentlyContinue)) { throw 'tray is not running' }
           if (-not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').mctwain) { throw 'no startup entry' }
-          Write-Host 'installed by winget: helper, tray and startup entry all present'
-      - name: Uninstall with winget
-        shell: pwsh
-        run: |
-          winget uninstall mormitech.mctwain --silent --disable-interactivity
+          Write-Host 'installed silently: helper, tray and startup entry all present'
+          $dir = Join-Path $env:LOCALAPPDATA 'mctwain'
+          $u = Start-Process (Join-Path $dir 'unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          if (-not $u.WaitForExit(120000)) { throw 'uninstaller did not finish in 2 minutes' }
           $deadline = (Get-Date).AddSeconds(60)
-          while ((Test-Path "$env:LOCALAPPDATA\mctwain\mctwain.exe") -and ((Get-Date) -lt $deadline)) { Start-Sleep -Seconds 2 }
+          while ((Test-Path (Join-Path $dir 'mctwain.exe')) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Seconds 2 }
           if (Get-Process mctwain, mctwain-tray -ErrorAction SilentlyContinue) { throw 'processes still running' }
-          if (Test-Path "$env:LOCALAPPDATA\mctwain\mctwain.exe") { throw 'files left after uninstall' }
-          Write-Host 'winget uninstall removed everything'
+          if (Test-Path (Join-Path $dir 'mctwain.exe')) { throw 'files left after uninstall' }
+          Write-Host 'silent uninstall removed everything'
