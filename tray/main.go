@@ -103,7 +103,7 @@ func poll() view {
 func main() { systray.Run(onReady, func() {}) }
 
 func onReady() {
-	systray.SetTemplateIcon(printerIcon(), printerIcon())
+	systray.SetTemplateIcon(trayIcon(), trayIcon())
 	systray.SetTooltip("mcTwain")
 
 	title := systray.AddMenuItem("mcTwain", "")
