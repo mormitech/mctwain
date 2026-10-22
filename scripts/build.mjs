@@ -80,25 +80,31 @@ rmSync(join(out, target.exe), { force: true });
 run(node, ['--build-sea', 'sea-config.json'], { cwd: out });
 if (process.platform === 'darwin') run('codesign', ['--sign', '-', '--force', join(out, target.exe)]);
 
-// 3b. macOS menu bar tray (Go). Only our build machines need Go; the finished binary has no dependencies.
+// 3b. Tray icon (Go) for macOS and Windows. Only our build machines need Go; the finished binary has no dependencies.
+const trayExe = process.platform === 'win32' ? 'mctwain-tray.exe' : 'mctwain-tray';
 let trayBuilt = false;
-if (process.platform === 'darwin' && existsSync(join(root, 'tray', 'go.mod')) && spawnSync('go', ['version']).status === 0) {
-  rmSync(join(out, 'mctwain-tray'), { force: true });
-  run('go', ['build', '-trimpath', '-ldflags', '-s -w', '-o', join(out, 'mctwain-tray'), '.'], {
-    cwd: join(root, 'tray'),
-    env: { ...process.env, CGO_ENABLED: '1' },
-  });
-  trayBuilt = true;
-} else if (process.platform === 'darwin') {
-  console.warn('Go not found: building without the tray');
+if (['darwin', 'win32'].includes(process.platform)) {
+  if (existsSync(join(root, 'tray', 'go.mod')) && spawnSync('go', ['version']).status === 0) {
+    rmSync(join(out, trayExe), { force: true });
+    run(
+      'go',
+      ['build', '-trimpath', '-ldflags', process.platform === 'win32' ? '-s -w -H=windowsgui' : '-s -w', '-o', join(out, trayExe), '.'],
+      { cwd: join(root, 'tray'), env: { ...process.env, CGO_ENABLED: process.platform === 'darwin' ? '1' : '0' } },
+    );
+    trayBuilt = true;
+  } else {
+    console.warn('Go not found: building without the tray');
+  }
 }
 
-// 3c. Plain archive for package managers (Homebrew): the finished executables, no installer scripts.
-if (process.platform !== 'win32') {
+// 3c. Plain archive for package managers (Homebrew, Scoop): the finished executables, no installer scripts.
+{
   mkdirSync(dist, { recursive: true });
-  const archive = join(dist, `mctwain-bin-${pkg.version}-${target.label}-${arch}.tar.gz`);
+  const files = [target.exe, ...(trayBuilt ? [trayExe] : [])];
+  const windows = process.platform === 'win32';
+  const archive = join(dist, `mctwain-bin-${pkg.version}-${target.label}-${arch}.${windows ? 'zip' : 'tar.gz'}`);
   rmSync(archive, { force: true });
-  run(tar, ['-czf', archive, '-C', out, 'mctwain', ...(trayBuilt ? ['mctwain-tray'] : [])]);
+  run(tar, [windows ? '-a' : '-czf', ...(windows ? ['-cf', archive] : [archive]), '-C', out, ...files]);
   console.log(`Built ${archive}`);
 }
 
@@ -165,8 +171,9 @@ if (process.platform === 'darwin') {
   const files =
     process.platform === 'linux'
       ? ['install.sh', 'uninstall.sh']
-      : ['install.ps1', 'uninstall.ps1', 'Install mctwain.cmd', 'Uninstall mctwain.cmd'];
+      : ['install.ps1', 'uninstall.ps1', 'Install mctwain.cmd', 'Uninstall mctwain.cmd', 'start.vbs'];
   for (const f of files) writeFileSync(join(dir, f), template(target.label, f));
+  if (trayBuilt) cpSync(join(out, trayExe), join(dir, trayExe));
   chmodSync(join(dir, target.exe), 0o755);
   for (const f of files.filter((f) => f.endsWith('.sh'))) chmodSync(join(dir, f), 0o755);
 
@@ -179,5 +186,30 @@ if (process.platform === 'darwin') {
     rmSync(archive, { force: true });
     run(tar, ['-a', '-cf', archive, '-C', stage, baseName]);
     console.log(`Built ${archive}`);
+    buildWindowsInstaller();
   }
+}
+
+// Silent-capable installer (what winget runs): per-user install, startup entry, starts at once, uninstaller.
+function buildWindowsInstaller() {
+  const candidates = [
+    process.env.ISCC,
+    'C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe',
+    'C:\\Program Files\\Inno Setup 6\\ISCC.exe',
+    join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Inno Setup 6', 'ISCC.exe'),
+  ].filter(Boolean);
+  const iscc = candidates.find((c) => existsSync(c));
+  if (!iscc) {
+    console.warn('Inno Setup (ISCC.exe) not found: skipping the installer .exe');
+    return;
+  }
+  if (!trayBuilt) throw new Error('the installer needs the tray; install Go');
+  const inno = join(stage, 'inno');
+  mkdirSync(inno, { recursive: true });
+  cpSync(join(out, target.exe), join(inno, target.exe));
+  cpSync(join(out, trayExe), join(inno, trayExe));
+  writeFileSync(join(inno, 'start.vbs'), template('windows', 'start.vbs'));
+  writeFileSync(join(inno, 'installer.iss'), template('windows', 'installer.iss').replaceAll('__VERSION__', pkg.version));
+  run(iscc, ['/Qp', `/O${dist}`, join(inno, 'installer.iss')]);
+  console.log(`Built ${join(dist, `mctwain-setup-${pkg.version}-windows-${arch}.exe`)}`);
 }

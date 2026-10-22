@@ -1,22 +1,17 @@
-# Installs mctwain for the current user and starts it at login.
+# Installs mctwain for the current user and starts it at login. (The zip alternative to the installer .exe.)
 $ErrorActionPreference = 'Stop'
 
 $dir = Join-Path $env:LOCALAPPDATA 'mctwain'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
 # Stop a previous version if one is running.
-Get-Process -Name mctwain -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name mctwain, mctwain-tray -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 500
 
-Copy-Item (Join-Path $PSScriptRoot 'mctwain.exe') (Join-Path $dir 'mctwain.exe') -Force
-
-# A tiny launcher so mctwain runs without a console window.
-$vbs = @"
-Set sh = CreateObject("WScript.Shell")
-sh.Environment("Process")("MCTWAIN_ALLOWED_ORIGINS") = "__ALLOWED_ORIGINS__"
-sh.Run """$dir\mctwain.exe""", 0, False
-"@
-Set-Content -Path (Join-Path $dir 'start.vbs') -Value $vbs -Encoding ASCII
+foreach ($file in 'mctwain.exe', 'mctwain-tray.exe', 'start.vbs') {
+  $source = Join-Path $PSScriptRoot $file
+  if (Test-Path $source) { Copy-Item $source (Join-Path $dir $file) -Force }
+}
 
 Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'mctwain' `
   -Value "wscript.exe `"$dir\start.vbs`""
