@@ -38,6 +38,7 @@ jobs:
           if ($out -notmatch 'succeeded') { throw 'manifest validation failed' }
           $other = ($out -split "`n") | Where-Object { $_ -match 'Manifest (Warning|Error)' -and $_ -notmatch 'schema header' }
           if ($other) { throw "unexpected validation messages: $other" }
+          $global:LASTEXITCODE = 0  # a step ends with the last native exit code; we judged the messages ourselves
       - name: Install from the manifest
         shell: pwsh
         run: |
