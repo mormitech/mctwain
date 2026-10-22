@@ -46,7 +46,10 @@ jobs:
         run: |
           $setup = Get-ChildItem dist\mctwain-setup-*.exe | Select-Object -First 1
           if (-not $setup) { throw 'no installer in dist' }
-          Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          # Not -Wait: that also waits for the helper the installer starts, which never exits.
+          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          if (-not $p.WaitForExit(180000)) { throw 'installer did not finish in 3 minutes' }
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
           $dir = Join-Path $env:LOCALAPPDATA 'mctwain'
           foreach ($f in 'mctwain.exe','mctwain-tray.exe','start.vbs') {
             if (-not (Test-Path (Join-Path $dir $f))) { throw "missing $f after install" }
@@ -59,7 +62,8 @@ jobs:
           if (-not (Get-Process mctwain-tray -ErrorAction SilentlyContinue)) { throw 'tray is not running' }
           Write-Host 'tray is running'
           $uninstaller = Get-ChildItem (Join-Path $dir 'unins*.exe') | Select-Object -First 1
-          Start-Process $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          $u = Start-Process $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          if (-not $u.WaitForExit(120000)) { throw 'uninstaller did not finish in 2 minutes' }
           Start-Sleep -Seconds 3
           if (Get-Process mctwain, mctwain-tray -ErrorAction SilentlyContinue) { throw 'processes still running after uninstall' }
           if (Test-Path (Join-Path $dir 'mctwain.exe')) { throw 'files left after uninstall' }

@@ -21,9 +21,14 @@ const repo = 'mormitech/mctwain';
 const release = `https://github.com/${repo}/releases/download/v${version}`;
 
 async function sha256(location) {
-  const buf = location.startsWith('file:')
-    ? readFileSync(new URL(location))
-    : Buffer.from(await (await fetch(location)).arrayBuffer());
+  let buf;
+  if (location.startsWith('file:')) {
+    buf = readFileSync(new URL(location));
+  } else {
+    const res = await fetch(location);
+    if (!res.ok) throw new Error(`${location}: HTTP ${res.status} (is the release published?)`);
+    buf = Buffer.from(await res.arrayBuffer());
+  }
   return createHash('sha256').update(buf).digest('hex');
 }
 
