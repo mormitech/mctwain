@@ -30,7 +30,14 @@ jobs:
           winget --version
       - name: Validate the manifest
         shell: pwsh
-        run: winget validate --manifest manifest
+        run: |
+          # The runner's winget (1.11) predates schema 1.12 and warns about its header line, which is expected;
+          # winget exits non-zero on any warning, so look at the messages instead of the exit code.
+          $out = winget validate --manifest manifest 2>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch 'succeeded') { throw 'manifest validation failed' }
+          $other = ($out -split "`n") | Where-Object { $_ -match 'Manifest (Warning|Error)' -and $_ -notmatch 'schema header' }
+          if ($other) { throw "unexpected validation messages: $other" }
       - name: Install from the manifest
         shell: pwsh
         run: |
