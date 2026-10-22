@@ -62,11 +62,16 @@ jobs:
           if (-not (Get-Process mctwain-tray -ErrorAction SilentlyContinue)) { throw 'tray is not running' }
           Write-Host 'tray is running'
           $uninstaller = Get-ChildItem (Join-Path $dir 'unins*.exe') | Select-Object -First 1
-          $u = Start-Process $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          $log = Join-Path $env:RUNNER_TEMP 'uninstall.log'
+          Write-Host "uninstaller: $($uninstaller.FullName)"
+          $u = Start-Process $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$log" -PassThru
           if (-not $u.WaitForExit(120000)) { throw 'uninstaller did not finish in 2 minutes' }
+          Write-Host "uninstaller exit code: $($u.ExitCode)"
           # The uninstaller hands over to a temporary copy of itself and exits, so wait for the files to go.
           $deadline = (Get-Date).AddSeconds(60)
           while ((Test-Path (Join-Path $dir 'mctwain.exe')) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Seconds 2 }
+          if (Test-Path $log) { Write-Host '--- uninstall log:'; Get-Content $log | Select-Object -Last 40 }
+          Write-Host '--- install folder now:'; Get-ChildItem $dir -ErrorAction SilentlyContinue | Format-Table Name, Length
           if (Get-Process mctwain, mctwain-tray -ErrorAction SilentlyContinue) { throw 'processes still running after uninstall' }
           if (Test-Path (Join-Path $dir 'mctwain.exe')) { throw 'files left after uninstall' }
           if ((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).mctwain) { throw 'startup entry left after uninstall' }
