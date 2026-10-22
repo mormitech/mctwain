@@ -43,7 +43,16 @@ jobs:
         shell: pwsh
         run: |
           winget settings --enable LocalManifestFiles
-          winget install --manifest manifest --silent --accept-package-agreements --disable-interactivity
+          $log = Join-Path $env:RUNNER_TEMP 'winget.log'
+          $p = Start-Process winget -ArgumentList 'install','--manifest','manifest','--silent','--accept-package-agreements','--disable-interactivity','--log',$log -PassThru -NoNewWindow
+          if (-not $p.WaitForExit(240000)) {
+            Write-Host '--- winget did not finish in 4 minutes; processes:'
+            Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'winget|mctwain|wscript|setup|unins|AppInstaller' } |
+              Select-Object ProcessId, ParentProcessId, Name, CommandLine | Format-Table -AutoSize -Wrap | Out-String -Width 220 | Write-Host
+            if (Test-Path $log) { Write-Host '--- winget log (tail):'; Get-Content $log | Select-Object -Last 40 }
+            throw 'winget install hung'
+          }
+          Write-Host "winget install exit code: $($p.ExitCode)"
           Start-Sleep -Seconds 8
           $status = Invoke-RestMethod http://127.0.0.1:7788/status
           if ($status.name -ne 'mctwain') { throw 'helper does not answer on 7788' }
