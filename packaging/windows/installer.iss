@@ -31,19 +31,25 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{sys}\wscript.exe"; Parameters: """{app}\start.vbs"""; Flags: nowait runhidden
 
-[UninstallRun]
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM mctwain-tray.exe"; Flags: runhidden; RunOnceId: "StopTray"
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM mctwain.exe"; Flags: runhidden; RunOnceId: "StopHelper"
-
 [Code]
-// An upgrade replaces files that are in use, so stop the running helper and tray first.
-procedure CurStepChanged(CurStep: TSetupStep);
+// taskkill returns before Windows has released the files of the killed process, so wait a moment before the
+// installer replaces or deletes them.
+procedure StopMctwain;
 var
   ResultCode: Integer;
 begin
-  if CurStep = ssInstall then
-  begin
-    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM mctwain-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM mctwain.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end;
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM mctwain-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM mctwain.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(2000);
+end;
+
+// An upgrade replaces files that are in use, so stop the running helper and tray first.
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then StopMctwain;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then StopMctwain;
 end;
